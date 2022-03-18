@@ -85,10 +85,9 @@ contract Lottery is Ownable {
         require(msg.value >= _ticketPrice, "Not enough funds to buy a ticket");
         require(block.timestamp <= _salesEnd, "No more ticket sales");
 
-        address addr = msg.sender;
-        _tickets[addr] = hashedSecret;
+        _tickets[msg.sender] = hashedSecret;
 
-        emit BuyTicket(addr);
+        emit BuyTicket(msg.sender);
     }
 
 
@@ -97,18 +96,14 @@ contract Lottery is Ownable {
         require(block.timestamp > _salesEnd, "It's too early to reveal");
         require(block.timestamp <= _revealEnd, "No more reveals");
 
-        address addr = msg.sender;
-
-        uint hashedSecret = _tickets[addr];
-        require(hashedSecret != 0, "No ticket");
-        require(uint(keccak256(abi.encode(secret))) == hashedSecret, "Secret doesn't match stored hash");
+        checkTicket(msg.sender, secret);
 
         //  Accumulate random from all revealed secrets.
         _rnd = uint(keccak256(abi.encode(secret, _rnd)));
 
-        _revealedAddresses.push(addr);
+        _revealedAddresses.push(msg.sender);
 
-        emit RevealSecret(addr);
+        emit RevealSecret(msg.sender);
     }
 
 
@@ -116,7 +111,7 @@ contract Lottery is Ownable {
     function endLottery(uint secret) public onlyOwner {
         require(block.timestamp > _revealEnd, "Lottery is still in progress");
         require(block.timestamp <= _endEnd, "It's too late to end the lottery");
-        require(uint(keccak256(abi.encode(secret))) == _ownersHashedSecret, "Secret doesn't match stored hash");
+        checkHash(secret, _ownersHashedSecret);
 
         uint n = _revealedAddresses.length;
         if (n > 0) {
@@ -141,20 +136,26 @@ contract Lottery is Ownable {
     function returnTicket(uint secret) public {
         require(block.timestamp > _endEnd, "It's too early to return tickets");
 
-        address addr = msg.sender;
+        checkTicket(msg.sender, secret);
 
-        uint hashedSecret = _tickets[addr];
-        require(hashedSecret != 0, "No ticket");
-        require(uint(keccak256(abi.encode(secret))) == hashedSecret, "Secret doesn't match stored hash");
+        payTo(msg.sender, _ticketPrice);
 
-        payTo(addr, _ticketPrice);
-
-        emit ReturnTicket(addr);
+        emit ReturnTicket(msg.sender);
     }
 
 
     function payTo(address to, uint amount) private {
         payable(to).transfer(amount);
+    }
+
+    function checkHash(uint secret, uint hashedSecret) private pure {
+        require(uint(keccak256(abi.encode(secret))) == hashedSecret, "Secret doesn't match stored hash");
+    }
+
+    function checkTicket(address addr, uint secret) private view {
+        uint hashedSecret = _tickets[addr];
+        require(hashedSecret != 0, "No ticket");
+        checkHash(secret, hashedSecret);
     }
 
 }
